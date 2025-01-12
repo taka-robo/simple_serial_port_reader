@@ -7,7 +7,9 @@
 #include <nodelet/nodelet.h>
 #include <ros/node_handle.h>
 #include <ros/publisher.h>
+#include <ros/subscriber.h>
 #include <ros/timer.h>
+#include <std_msgs/String.h>
 #include <simple_serial_port_reader_msgs/StringStamped.h>
 
 #include <boost/algorithm/string/replace.hpp>
@@ -55,6 +57,9 @@ private:
 
     // create the publisher
     pub_ = nh.advertise<sspr_msgs::StringStamped>("formatted", 1);
+
+    // create the subscriber
+    sub_ = nh.subscribe<std_msgs::String>("input_string", 1, &SimpleSerialPortReader::stringCallback, this);
 
     // call main function (blocking) on multi-threading queue via one-shot timer
     timer_ = mnh.createTimer(ros::Duration(0.1), &SimpleSerialPortReader::main, this,
@@ -120,6 +125,21 @@ private:
     }
   }
 
+  void stringCallback(const std_msgs::String::ConstPtr &msg) {
+    namespace ba = boost::asio;
+    try {
+      if (verbose_) {
+        NODELET_INFO_STREAM("received string: \"" << msg->data << "\"");
+      }
+      ba::write(serial_, ba::buffer(msg->data));
+      if (verbose_) {
+        NODELET_INFO_STREAM("sent string via serial: \"" << msg->data << "\"");
+      }
+    } catch (const std::exception &error) {
+      NODELET_ERROR_STREAM("error sending string via serial: " << error.what());
+    }
+  }
+
   static std::string replaceEscapeSequence(std::string str) {
     static const std::string replace_map[][2] = {{R"(\a)", "\a"}, {R"(\b)", "\b"}, {R"(\f)", "\f"},
                                                  {R"(\n)", "\n"}, {R"(\r)", "\r"}, {R"(\t)", "\t"},
@@ -140,6 +160,7 @@ private:
 
   ros::Timer timer_;
   ros::Publisher pub_;
+  ros::Subscriber sub_;
 
   boost::asio::io_service io_service_;
   boost::asio::serial_port serial_;
